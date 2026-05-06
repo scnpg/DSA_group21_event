@@ -16,25 +16,26 @@
 typedef struct heap{
     int data[MAX_SIZE];
     int size;
-    int swap_count; //交換次數
-    int compare_count; //比較次數
+    //這次操作的數據 (例如：這次 Insert 換了幾次)
+    int cur_swap_count; //交換次數
+    int cur_compare_count; //比較次數
+    // 整個程式運行至今的累計數據 (用於計算總複雜度)
+    int total_swap_count;
+    int total_compare_count;
     bool is_max_heap;
 }Heap;
-
-typedef struct Info{
-    int parent;
-    int self;
-}info;
 
 void swap(Heap* h, int* a, int* b){
     int temp = *a;
     *a = *b;
     *b = temp;
-    h->swap_count++;
+    h->cur_swap_count++;
+    h->total_swap_count++;
 }
 
 bool compare(Heap* h, int parent_val, int child_val){
-    h->compare_count++;
+    h->cur_compare_count++;
+    h->total_compare_count++;
     if(h->is_max_heap){
         return child_val > parent_val;
     }
@@ -44,21 +45,109 @@ bool compare(Heap* h, int parent_val, int child_val){
 }
 
 //todo
-void init_heap(Heap* h, bool is_max); // 初始化 size = 0 與設定 max/min 模式
-void reset_stats(Heap* h);            // 歸零統計數據，每次操作前呼叫
-void print_heap_state(Heap* h);       // 把當前陣列狀態印出來給 Python 讀取
+void init_heap(Heap* h, bool is_max){ // 初始化 size = 0 與設定 max/min 模式
+    h->is_max_heap = is_max;
+    h->size = 0;
+    h->cur_compare_count = 0;
+    h->cur_swap_count = 0;
+    h->total_compare_count = 0;
+    h->total_swap_count = 0;
+} 
+void reset_stats(Heap* h){// 歸零統計數據，每次insert、extract操作前呼叫
+    h->cur_compare_count = 0;
+    h->cur_swap_count = 0;
+}            
+void print_heap_state(Heap* h){// 把當前陣列狀態印出來給 Python 讀取
+    printf("STATUS: Cur_Swap: %d, Cur_Compare: %d, Total_Swap: %d, Total_compare: %d\n",h->cur_swap_count,h->cur_compare_count,h->total_swap_count,h->total_compare_count);
+    printf("SIZE: %d\n",h->size);
+    printf("DATA: ");
+    for(int i=0; i<h->size; i++){
+        printf("%d ",h->data[i]);
+    }
+    printf("\n------------\n");
+}       
 
-bool is_empty(Heap* h); // 前端可以用來決定是否要把 Extract 按鈕反灰
-bool is_full(Heap* h); // 前端可以用來決定是否要把 Insert 按鈕反灰
+bool is_empty(Heap* h){// 前端可以用來決定是否要把 Extract 按鈕反灰
+    return h->size == 0;
+} 
+bool is_full(Heap* h){// 前端可以用來決定是否要把 Insert 按鈕反灰
+    return h->size == MAX_SIZE;
+} 
 bool is_valid_heap(Heap* h); // 檢查當前陣列是否真的符合 Heap 規則 (除錯用)
 
-void sift_up(Heap* h, int index); //往上移動的過程 比較並交換，直到遇到比自己大(Max)或小(Min)的父節點
-void sift_down(Heap* h, int index);//往下移動的過程 比較並交換，直到遇到比自己小(Max)或大(Min)的子節點
+void sift_up(Heap* h, int index){//往上移動的過程 比較並交換，直到遇到比自己大(Max)或小(Min)的父節點
+    while(index > 0){
+        int parent = (index-1)/2;
+        printf("ACTION: COMPARE ( %d , %d )\n",index,parent);
+        if(compare(h, h->data[parent], h->data[index])){
+            
+            printf("ACTION: SWAP ( %d , %d )\n",index,parent);
+            swap(h, &(h->data[index]), &(h->data[parent]));
 
-info trace(Heap* h, int index);//將每一步和誰swap，跟和誰compare都回傳
+            index = parent;
+        }
+        else{
+            break;
+        }
+    }
+} 
+void sift_down(Heap* h, int index){//往下移動的過程 比較並交換，直到遇到比自己小(Max)或大(Min)的子節點
+    int left = 2*index+1;
+    while(left < h->size){
+        int right = 2*index+2;
+        int extreme_child = left;
+        if(right < h->size){
+            printf("ACTION: COMPARE ( %d , %d )\n",left,right);
+            if(compare(h,h->data[left],h->data[right])){
+                extreme_child = right;
+            }
+        }
 
-void insert(Heap* h, int value);//插入在尾端 將值放在陣列尾端，size + 1，然後呼叫 sift_up 讓它浮動到正確位置
-int extract_top(Heap* h);//pop 記錄頂端值準備回傳，將尾端元素移到頂端 (index 0)，size - 1，然後呼叫 sift_down 讓它沉澱
+        printf("ACTION: COMPARE ( %d , %d )\n",index,extreme_child);
+        if(compare(h,h->data[index],h->data[extreme_child])){
+            printf("ACTION: SWAP ( %d , %d )\n",index,extreme_child);
+            swap(h, &(h->data[index]), &(h->data[extreme_child]));
+
+            index = extreme_child;
+            left = 2*index+1;
+        }
+        else{
+            break;
+        }
+    }
+}
+
+
+void insert(Heap* h, int value){//插入在尾端 將值放在陣列尾端，size + 1，然後呼叫 sift_up 讓它浮動到正確位置
+    if(is_full(h)){
+        printf("ERROR: Heap is full!\n");
+        return;
+    }
+    
+    reset_stats(h);
+
+    int index = h->size;
+    h->data[index] = value;
+    h->size++;
+    printf("ACTION: INSERT %d AT INDEX %d\n", value, index);
+
+    sift_up(h,index);
+}
+int extract_top(Heap* h){//pop 記錄頂端值準備回傳，將尾端元素移到頂端 (index 0)，size - 1，然後呼叫 sift_down 讓它沉澱
+    if(is_empty(h)){
+        printf("ERROR: Heap is empty!\n");
+        return -1;
+    }
+
+    reset_stats(h);
+
+    int top = h->data[0];
+    h->data[0] = h->data[h->size-1];
+    h->size--;
+    printf("ACTION: EXTRACT %d\n",top);
+    sift_down(h,0);
+    return top;
+}
 int peek_top(Heap* h);
 int get_height(Heap* h); //計算這棵樹目前有幾層
 int get_level(int index);//回傳某個 index 位於樹的第幾層
