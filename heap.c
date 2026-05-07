@@ -152,12 +152,66 @@ int peek_top(Heap* h);
 int get_height(Heap* h); //計算這棵樹目前有幾層
 int get_level(int index);//回傳某個 index 位於樹的第幾層
 
-void build_heap(Heap* h, int *arr, int n);//從雜亂的陣列建一個maxheap或是minheap
+void build_heap(Heap* h, int *arr, int n){//從雜亂的陣列建一個maxheap或是minheap
+    h->size = 0;
+    for(int i = 0; i < n && i < MAX_SIZE; i++){
+        h->data[i] = arr[i];
+        h->size++;
+    }
+    printf("ACTION: BUILD_HEAP_START\n");
+    reset_stats(h);
+
+    for(int i=(h->size/2)-1; i >= 0; i--){
+        printf("ACTION: BUILD_STEP AT_INDEX %d\n", i);
+        sift_down(h, i);
+    }
+    printf("ACTION: BUILD_HEAP_DONE. Total_Compare: %d\n", h->total_compare_count);
+}
 void heap_sort(Heap* h);//heap sort 不斷 extract_top 將陣列由小到大或由大到小排序
 
-void update_key(Heap *h, int index, int new_value); // 更改某個節點的值，並重新 Sift 調整
-void delete_idx(Heap *h, int index);                // 刪除任意 index 的節點，與尾端交換後重新 Sift 調整
+void update_key(Heap *h, int index, int new_value){// 更改某個節點的值，並重新 Sift 調整
+    if (index < 0 || index >= h->size){
+        printf("ERROR: Invalid index %d\n", index);
+        return;
+    }
+    reset_stats(h);
+    int old_value = h->data[index];
+    h->data[index] = new_value;
+    printf("ACTION: UPDATE_KEY INDEX:%d FROM:%d TO:%d\n", index, old_value, new_value);
+    
+    if (index == 0) {
+        sift_down(h, 0);
+    } else {
+        int parent = (index-1)/2;
+        printf("ACTION: COMPARE_FOR_DIRECTION ( %d , %d )\n", index, parent);
+        if (compare(h, h->data[parent], h->data[index])){
+            sift_up(h, index);
+        }
+        else{
+            sift_down(h, index);
+        }
+    }
+} 
+void delete_idx(Heap *h, int index){// 刪除任意 index 的節點，與尾端交換後重新 Sift 調整
+    if (index < 0 || index >= h->size){
+        printf("ERROR: Invalid index %d\n", index);
+        return;
+    }
+    
+    reset_stats(h);
+    int deleted_value = h->data[index];
 
+    if (index == h->size-1){
+        printf("ACTION: DELETE_LAST INDEX:%d VALUE:%d\n", index, deleted_value);
+        h->size--;
+    }
+    else{
+        int last_value = h->data[h->size-1]; //將最後一個位置的人搬到index位置
+        h->size--;
+        printf("ACTION: DELETE_REPLACE INDEX:%d WITH_VALUE:%d (ORIGINAL_WAS:%d)\n", index, last_value, deleted_value);
+        update_key(h, index, last_value);
+    }
+}
 void invert_heap(Heap* h);                  // Max-Heap 與 Min-Heap 瞬間切換
 void merge_heaps(Heap* h1, Heap* h2, Heap* result); // 雙堆合併動畫
 int search_value(Heap* h, int target);      // 展現 O(N) 搜尋的動畫
