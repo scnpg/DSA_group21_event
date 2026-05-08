@@ -167,7 +167,27 @@ void build_heap(Heap* h, int *arr, int n){//從雜亂的陣列建一個maxheap�
     }
     printf("ACTION: BUILD_HEAP_DONE. Total_Compare: %d\n", h->total_compare_count);
 }
-void heap_sort(Heap* h);//heap sort 不斷 extract_top 將陣列由小到大或由大到小排序
+void heap_sort(Heap* h){//heap sort 不斷 extract_top 將陣列由小到大或由大到小排序
+    //把雜亂的陣列變成 Heap
+    // 假設資料已經在 h->data 裡了
+    for(int i = (h->size/2)-1; i >= 0; i--){
+        sift_down(h, i);
+    }
+    
+    int original_size = h->size;
+    for(int i = 0; i < original_size - 1; i++){
+        // 手動做 extract_top 的邏輯，但把彈出的值存到陣列末尾
+        int last_idx = h->size-1;
+        swap(h, 0, last_idx);
+        h->size--;
+         printf("ACTION: HEAP_SORT CONTINUE SORTED INDEX: %d\n",last_idx);
+        sift_down(h, 0);
+    }
+    
+    h->size = original_size; // 排序完後還原 size 讓前端印出完整陣列
+    printf("{\"action\": \"SORT_DONE\"}\n");
+    print_heap_state(h);
+}
 
 void update_key(Heap *h, int index, int new_value){// 更改某個節點的值，並重新 Sift 調整
     if (index < 0 || index >= h->size){
