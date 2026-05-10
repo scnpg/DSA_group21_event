@@ -3,7 +3,6 @@
 
 #include <stdbool.h>
 
-// 對應 Python dataclass 的 C 結構體
 typedef struct {
     int* heap;
     int size;
@@ -13,9 +12,10 @@ typedef struct {
     bool is_idle;
 } VisualState;
 
-// 定義 Callback 函數指標 (讓 C1 可以把狀態傳給 C2)
 typedef void (*StateCallback)(VisualState* state);
 
 void heap_insert(int* heap, int* size, int value, StateCallback callback);
+void sift_down(int* heap, int size, int index, StateCallback callback);
+void heap_sort(int* heap, int* size, StateCallback callback);
 
 #endif
