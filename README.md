@@ -1,9 +1,8 @@
 # DSA Project: Max Heap Visualizer.
 
 ## Description
-```bash
 A visualizer to understand how heap sort works. Nodes of interest will be highlighted, and each step of heapify is displayed for the insertion and removal of nodes.
-```
+
 
 ## Dependencies
 ```bash
@@ -25,8 +24,8 @@ flet run heap_demo.py
 ```
 
 ## What to do
-```bash
+
 1. Insertion: enter a value in the text box, and click insert to see your value be added to the heap. Heapify after.
 2. Removal: Remove the top node and heapify.
 3. Clear: Gives you an empty heap. 
-```
+
