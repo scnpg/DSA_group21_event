@@ -73,7 +73,20 @@ bool is_empty(Heap* h){// 前端可以用來決定是否要把 Extract 按鈕反
 bool is_full(Heap* h){// 前端可以用來決定是否要把 Insert 按鈕反灰
     return h->size == MAX_SIZE;
 } 
-bool is_valid_heap(Heap* h); // 檢查當前陣列是否真的符合 Heap 規則 (除錯用)
+bool is_valid_heap(Heap* h) {// 檢查當前陣列是否真的符合 Heap 規則 (除錯用)
+    for (int i = 0; i <= (h->size - 2) / 2; i++) {
+        int left = 2 * i + 1;
+        int right = 2 * i + 2;
+        if (h->is_max_heap) {
+            if (h->data[i] < h->data[left]) return false;
+            if (right < h->size && h->data[i] < h->data[right]) return false;
+        } else {
+            if (h->data[i] > h->data[left]) return false;
+            if (right < h->size && h->data[i] > h->data[right]) return false;
+        }
+    }
+    return true;
+} 
 
 void sift_up(Heap* h, int index){//往上移動的過程 比較並交換，直到遇到比自己大(Max)或小(Min)的父節點
     while(index > 0){
@@ -148,9 +161,20 @@ int extract_top(Heap* h){//pop 記錄頂端值準備回傳，將尾端元素移�
     sift_down(h,0);
     return top;
 }
-int peek_top(Heap* h);
-int get_height(Heap* h); //計算這棵樹目前有幾層
-int get_level(int index);//回傳某個 index 位於樹的第幾層
+
+int peek_top(Heap* h) {
+    return (h->size > 0) ? h->data[0] : -1;
+}
+
+int get_height(Heap* h) {//計算這棵樹目前有幾層
+    if (h->size == 0) return 0;
+    return (int)log2(h->size) + 1;
+} 
+
+int get_level(int index) {//回傳某個 index 位於樹的第幾層
+    if (index < 0) return -1;
+    return (int)log2(index + 1);
+}
 
 void build_heap(Heap* h, int *arr, int n){//從雜亂的陣列建一個maxheap或是minheap
     h->size = 0;
@@ -232,17 +256,73 @@ void delete_idx(Heap *h, int index){// 刪除任意 index 的節點，與尾端�
         update_key(h, index, last_value);
     }
 }
-void invert_heap(Heap* h);                  // Max-Heap 與 Min-Heap 瞬間切換
-void merge_heaps(Heap* h1, Heap* h2, Heap* result); // 雙堆合併動畫
-int search_value(Heap* h, int target);      // 展現 O(N) 搜尋的動畫
-int find_kth(Heap* h, int k);               // 尋找第 K 大/小元素
-void batch_insert(Heap* h, int *arr, int n);// 批次匯入展示 O(N log N) 效能
-void clear_heap(Heap* h);                   // 一鍵清空
+void invert_heap(Heap* h) {// Max-Heap 與 Min-Heap 瞬間切換
+    printf("ACTION: INVERT_START. MODE: %s -> %s\n", h->is_max_heap ? "MAX" : "MIN", h->is_max_heap ? "MIN" : "MAX");
+    h->is_max_heap = !h->is_max_heap;
+    for (int i = (h->size / 2) - 1; i >= 0; i--) sift_down(h, i);
+    printf("ACTION: INVERT_DONE\n");
+}           
 
+void merge_heaps(Heap* h1, Heap* h2, Heap* result) {// 雙堆合併動畫
+    if (h1->size + h2->size > MAX_SIZE) { printf("ERROR: Merged size too large!\n"); return; }
+    init_heap(result, h1->is_max_heap);
+    for (int i = 0; i < h1->size; i++) result->data[result->size++] = h1->data[i];
+    for (int i = 0; i < h2->size; i++) result->data[result->size++] = h2->data[i];
+    printf("ACTION: MERGE_START. REBUILDING...\n");
+    for (int i = (result->size / 2) - 1; i >= 0; i--) sift_down(result, i);
+    printf("ACTION: MERGE_DONE\n");
+} 
 
-void print_prefix(Heap* h);
-void print_infix(Heap* h);
-void print_suffix(Heap* h);
+int search_value(Heap* h, int target) {// 展現 O(N) 搜尋的動畫
+    for (int i = 0; i < h->size; i++) {
+        printf("ACTION: SEARCH_CHECK INDEX: %d VALUE: %d\n", i, h->data[i]);
+        if (h->data[i] == target) {
+            printf("ACTION: SEARCH_FOUND AT INDEX: %d\n", i);
+            return i;
+        }
+    }
+    printf("ACTION: SEARCH_NOT_FOUND\n");
+    return -1;
+}
+int find_kth(Heap* h, int k) {// 尋找第 K 大/小元素
+    if (k <= 0 || k > h->size) return -1;
+    Heap temp = *h;
+    int val = -1;
+    for (int i = 0; i < k; i++) val = extract_top(&temp);
+    return val;
+}
+void batch_insert(Heap* h, int *arr, int n) {// 批次匯入展示 O(N log N) 效能
+    for (int i = 0; i < n; i++) insert(h, arr[i]);
+}
+void clear_heap(Heap* h) {// 一鍵清空
+    h->size = 0;
+    reset_stats(h);
+    printf("ACTION: CLEAR_HEAP_SUCCESS\n");
+}
+
+void _prefix(Heap* h, int i) {
+    if (i >= h->size) return;
+    printf("%d ", h->data[i]);
+    _prefix(h, 2 * i + 1);
+    _prefix(h, 2 * i + 2);
+}
+void print_prefix(Heap* h) { printf("PREFIX: "); _prefix(h, 0); printf("\n"); }
+
+void _infix(Heap* h, int i) {
+    if (i >= h->size) return;
+    _infix(h, 2 * i + 1);
+    printf("%d ", h->data[i]);
+    _infix(h, 2 * i + 2);
+}
+void print_infix(Heap* h) { printf("INFIX: "); _infix(h, 0); printf("\n"); }
+
+void _suffix(Heap* h, int i) {
+    if (i >= h->size) return;
+    _suffix(h, 2 * i + 1);
+    _suffix(h, 2 * i + 2);
+    printf("%d ", h->data[i]);
+}
+void print_suffix(Heap* h) { printf("SUFFIX: "); _suffix(h, 0); printf("\n"); }
 //目前的想法 歡迎多加補充
 
 int main(){
@@ -272,3 +352,33 @@ int main(){
     }
     return 0;
 }
+// int main() {
+//     Heap h;
+//     int mode;
+//     if (scanf("%d", &mode) == EOF) return 0;
+//     init_heap(&h, mode > 0);
+    
+//     char cmd[50];
+//     int val;
+//     while (scanf("%s", cmd) != EOF) {
+//         if (strcmp(cmd, "INSERT") == 0) {
+//             scanf("%d", &val);
+//             insert(&h, val);
+//             print_heap_state(&h);
+//         } else if (strcmp(cmd, "EXTRACT") == 0) {
+//             extract_top(&h);
+//             print_heap_state(&h);
+//         } else if (strcmp(cmd, "INVERT") == 0) {
+//             invert_heap(&h);
+//             print_heap_state(&h);
+//         } else if (strcmp(cmd, "CLEAR") == 0) {
+//             clear_heap(&h);
+//         } else if (strcmp(cmd, "SEARCH") == 0) {
+//             scanf("%d", &val);
+//             search_value(&h, val);
+//         } else if (strcmp(cmd, "EXIT") == 0) {
+//             break;
+//         }
+//     }
+//     return 0;
+// }
