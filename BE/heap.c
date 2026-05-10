@@ -178,7 +178,7 @@ void heap_sort(Heap* h){//heap sort 不斷 extract_top 將陣列由小到大或�
     for(int i = 0; i < original_size - 1; i++){
         // 手動做 extract_top 的邏輯，但把彈出的值存到陣列末尾
         int last_idx = h->size-1;
-        swap(h, 0, last_idx);
+        swap(h, &(h->data[0]), &(h->data[last_idx]));
         h->size--;
          printf("ACTION: HEAP_SORT CONTINUE SORTED INDEX: %d\n",last_idx);
         sift_down(h, 0);
