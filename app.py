@@ -8,11 +8,8 @@ import os
 from state import VisualState
 from ui_components import create_heap_view, get_status_text
 
-
 class BackendController:
-    """管理 C 語言子程序的生命週期與 Threading"""
     def __init__(self, on_state_update):
-        # 自動編譯 C 專案
         exe_name = "backend.exe" if sys.platform == "win32" else "./backend"    
         subprocess.run(["gcc", "main.c", "heap_logic.c", "-o", exe_name.replace("./", "")], check=True)
         
@@ -20,8 +17,6 @@ class BackendController:
             [exe_name], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1
         )
         self.on_state_update = on_state_update
-        
-        # 啟動背景讀取執行緒，保證 UI 絕對不卡死
         threading.Thread(target=self._read_loop, daemon=True).start()
 
     def _read_loop(self):
@@ -30,14 +25,13 @@ class BackendController:
             if not line: break
             try:
                 data = json.loads(line.strip())
-                # 手動字典解包至 Dataclass，確保型別安全且無外部依賴
                 state = VisualState(
                     heap=data.get("heap", []),
                     event=data.get("event", "IDLE"),
                     targets=data.get("targets", []),
                     is_idle=data.get("is_idle", True)
                 )
-                self.on_state_update(state) # 觸發 UI 更新
+                self.on_state_update(state)
             except Exception as e:
                 print(f"IPC 解析錯誤: {e}")
 
@@ -49,53 +43,67 @@ def main(page: ft.Page):
     page.title = "Heap Visualizer"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.theme_mode = ft.ThemeMode.LIGHT
+    page.window_width = 1100 
 
-    # --- UI 元件初始化 ---
+    # 1. Define UI Components FIRST
     status_text = ft.Text("初始化中...", size=20, color=ft.Colors.BLUE_700)
-    heap_container = ft.Container(height=100)
+    tree_view = ft.Container(expand=True, height=400, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10)
+    array_view = ft.Container(expand=True, height=400, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10)
     
     val_input = ft.TextField(label="輸入數字", width=100)
     insert_btn = ft.ElevatedButton("Insert")
+    sort_btn = ft.ElevatedButton("Sort Heap", bgcolor=ft.Colors.ORANGE_800, color=ft.Colors.WHITE)
     step_btn = ft.ElevatedButton("下一步 (Step)", disabled=True)
     
-    # --- UI 更新回呼函數 (給背景執行緒呼叫) ---
+    # 2. Define Callback
     def handle_state_update(state: VisualState):
         status_text.value = get_status_text(state)
-        heap_container.content = create_heap_view(state)
+        tree_view.content = create_heap_view(state, mode="tree")
+        array_view.content = create_heap_view(state, mode="array")
         
-        # UI 防呆控制：演算法進行中鎖定輸入，閒置時解鎖
+        # Enable/Disable logic
         val_input.disabled = not state.is_idle
         insert_btn.disabled = not state.is_idle
+        sort_btn.disabled = not state.is_idle
         step_btn.disabled = state.is_idle
         page.update()
 
-    # 啟動後端控制器
     backend = BackendController(on_state_update=handle_state_update)
 
-    # --- 事件綁定 ---
+    # 3. Define Event Handlers
     def on_insert(e):
         if val_input.value.isdigit():
             backend.send_command(f"INSERT {val_input.value}")
             val_input.value = ""
+            page.update()
+
+    def on_sort(e):
+        backend.send_command("SORT")
+        page.update()
 
     def on_step(e):
-        step_btn.disabled = True # 防止連點過快導致管線崩潰
+        backend.send_command("") # Send empty line to C
         page.update()
-        backend.send_command("") # 送出空字串 + \n 解鎖 C 語言
 
+    # 4. Bind Events to Buttons
     insert_btn.on_click = on_insert
+    sort_btn.on_click = on_sort
     step_btn.on_click = on_step
 
-    # --- 排版與掛載 ---
-    controls_row = ft.Row([val_input, insert_btn, step_btn], alignment=ft.MainAxisAlignment.CENTER)
+    # 5. Build Layout
     page.add(
-        ft.Container(height=30),
-        ft.Text("Demo", size=32, weight=ft.FontWeight.BOLD),
+        ft.Container(height=20),
+        ft.Text("Heap Sort Visualizer", size=32, weight=ft.FontWeight.BOLD),
         status_text,
-        ft.Container(height=20),
-        heap_container,
-        ft.Container(height=20),
-        controls_row
+        ft.Row(
+            [
+                ft.Column([ft.Text("Tree View", weight="bold"), tree_view], expand=1),
+                ft.Column([ft.Text("Array View (10 per row)", weight="bold"), array_view], expand=1),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=20,
+        ),
+        ft.Row([val_input, insert_btn, sort_btn, step_btn], alignment=ft.MainAxisAlignment.CENTER)
     )
 
 ft.app(target=main)
