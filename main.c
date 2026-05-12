@@ -46,6 +46,15 @@ int main() {
                 heap_insert(heap, &size, val, send_state_and_block);
             }
         }
+        else if (strncmp(cmd, "REMOVE", 6) == 0) {
+            if (size > 0) {
+                heap_remove_top(heap, &size, send_state_and_block);
+            } else {
+                // 如果 Heap 是空的，發送一個 DONE 狀態讓 Python 回到 IDLE
+                VisualState empty_state = {heap, size, "EMPTY", -1, -1, true};
+                send_state_and_block(&empty_state);
+            }
+        }
     }
     return 0;
 }

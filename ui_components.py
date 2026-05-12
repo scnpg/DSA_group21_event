@@ -4,13 +4,29 @@ import math
 def get_status_text(state):
     if state.is_idle:
         return "Status: Ready (Idle)"
-    
+
     if state.event == "INSERT":
-        return f"Action: Inserting value into Heap..."
+        return "Action: Inserting value into Heap..."
+    
+    elif state.event == "EXTRACT_PREPARE":
+        return f"Action: Preparing to remove root. Highlighting root and last node {state.targets}"
+    
+    elif state.event == "EXTRACT_SWAP":
+        return f"Action: Swapping root with last node {state.targets}"
+    
+    elif state.event == "REMOVED_START_SIFT":
+        return "Action: Root removed. Starting Sift Down (Heapify) to restore order..."
+    
     elif state.event == "SWAP":
         return f"Action: Swapping indices {state.targets}"
+    
     elif state.event == "COMPARE":
         return f"Action: Comparing indices {state.targets}"
+    
+    elif state.event == "DONE":
+        return "Action: Operation completed successfully!"
+    
+    return f"Action: {state.event} in progress..."
     
     return f"Status: {state.event} in progress..."
 def create_heap_view(state, mode="tree"):

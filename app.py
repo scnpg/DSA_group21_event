@@ -54,18 +54,31 @@ def main(page: ft.Page):
     insert_btn = ft.ElevatedButton("Insert")
     sort_btn = ft.ElevatedButton("Sort Heap", bgcolor=ft.Colors.ORANGE_800, color=ft.Colors.WHITE)
     step_btn = ft.ElevatedButton("下一步 (Step)", disabled=True)
+    remove_btn = ft.ElevatedButton(
+        "Remove Top", 
+        bgcolor=ft.Colors.RED_700, 
+        color=ft.Colors.WHITE,
+        disabled=True
+    )
     
     # 2. Define Callback
     def handle_state_update(state: VisualState):
         status_text.value = get_status_text(state)
         tree_view.content = create_heap_view(state, mode="tree")
         array_view.content = create_heap_view(state, mode="array")
+
+        is_idle = state.is_idle
+        has_data = len(state.heap) > 0
         
         # Enable/Disable logic
         val_input.disabled = not state.is_idle
         insert_btn.disabled = not state.is_idle
+
         sort_btn.disabled = not state.is_idle
+        remove_btn.disabled = not (is_idle and has_data)
+
         step_btn.disabled = state.is_idle
+
         page.update()
 
     backend = BackendController(on_state_update=handle_state_update)
@@ -85,10 +98,15 @@ def main(page: ft.Page):
         backend.send_command("") # Send empty line to C
         page.update()
 
+    def on_remove(e):
+        backend.send_command("REMOVE")
+        page.update()
+
     # 4. Bind Events to Buttons
     insert_btn.on_click = on_insert
     sort_btn.on_click = on_sort
     step_btn.on_click = on_step
+    remove_btn.on_click = on_remove
 
     # 5. Build Layout
     page.add(
@@ -103,7 +121,7 @@ def main(page: ft.Page):
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=20,
         ),
-        ft.Row([val_input, insert_btn, sort_btn, step_btn], alignment=ft.MainAxisAlignment.CENTER)
+        ft.Row([val_input, insert_btn, sort_btn, remove_btn, step_btn], alignment=ft.MainAxisAlignment.CENTER)
     )
 
 ft.app(target=main)

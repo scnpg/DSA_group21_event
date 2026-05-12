@@ -2,6 +2,41 @@
 
 #include "heap_logic.h"
 
+void heap_remove_top(int* heap, int* size, StateCallback callback) {
+    if (*size <= 0) return;
+
+    // Step 1: Mark the top for removal (before swapping with the last node)
+    VisualState state = {heap, *size, "EXTRACT_PREPARE", 0, *size - 1, false};
+    callback(&state);
+
+    // Step 2: Swap the top element with the last element
+    int temp = heap[0];
+    heap[0] = heap[*size - 1];
+    heap[*size - 1] = temp;
+
+    // Trigger callback to reflect the swap
+    state.event = "EXTRACT_SWAP";
+    callback(&state);
+
+    // Step 3: Decrease the size; the original top is now outside the active heap range
+    (*size)--;
+
+    // Step 4: Perform sift_down if there are remaining nodes
+    if (*size > 0) {
+        state.size = *size;
+        state.event = "REMOVED_START_SIFT";
+        state.target_1 = -1;
+        state.target_2 = -1;
+        callback(&state);
+
+        sift_down(heap, *size, 0, callback);
+    }
+
+    // Step 5: Process completed
+    VisualState done = {heap, *size, "DONE", -1, -1, true};
+    callback(&done);
+}
+
 void sift_down(int* heap, int size, int index, StateCallback callback) {
     int root = index;
     while (root * 2 + 1 < size) {

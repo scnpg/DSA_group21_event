@@ -17,5 +17,6 @@ typedef void (*StateCallback)(VisualState* state);
 void heap_insert(int* heap, int* size, int value, StateCallback callback);
 void sift_down(int* heap, int size, int index, StateCallback callback);
 void heap_sort(int* heap, int* size, StateCallback callback);
+void heap_remove_top(int* heap, int* size, StateCallback callback);
 
 #endif
