@@ -2,6 +2,7 @@
 #include<stdlib.h>
 #include<stdbool.h>
 #include<string.h>
+#include <math.h>
 
 #define MAX_SIZE 100
 //用array實作heap
@@ -57,6 +58,7 @@ void reset_stats(Heap* h){// 歸零統計數據，每次insert、extract操作�
     h->cur_compare_count = 0;
     h->cur_swap_count = 0;
 }            
+
 void print_heap_state(Heap* h){// 把當前陣列狀態印出來給 Python 讀取
     printf("STATUS: Cur_Swap: %d, Cur_Compare: %d, Total_Swap: %d, Total_compare: %d\n",h->cur_swap_count,h->cur_compare_count,h->total_swap_count,h->total_compare_count);
     printf("SIZE: %d\n",h->size);
@@ -73,7 +75,20 @@ bool is_empty(Heap* h){// 前端可以用來決定是否要把 Extract 按鈕反
 bool is_full(Heap* h){// 前端可以用來決定是否要把 Insert 按鈕反灰
     return h->size == MAX_SIZE;
 } 
-bool is_valid_heap(Heap* h); // 檢查當前陣列是否真的符合 Heap 規則 (除錯用)
+bool is_valid_heap(Heap* h) {// 檢查當前陣列是否真的符合 Heap 規則 (除錯用)
+    for (int i = 0; i <= (h->size - 2) / 2; i++) {
+        int left = 2 * i + 1;
+        int right = 2 * i + 2;
+        if (h->is_max_heap) {
+            if (h->data[i] < h->data[left]) return false;
+            if (right < h->size && h->data[i] < h->data[right]) return false;
+        } else {
+            if (h->data[i] > h->data[left]) return false;
+            if (right < h->size && h->data[i] > h->data[right]) return false;
+        }
+    }
+    return true;
+} 
 
 void sift_up(Heap* h, int index){//往上移動的過程 比較並交換，直到遇到比自己大(Max)或小(Min)的父節點
     while(index > 0){
@@ -148,9 +163,20 @@ int extract_top(Heap* h){//pop 記錄頂端值準備回傳，將尾端元素移�
     sift_down(h,0);
     return top;
 }
-int peek_top(Heap* h);
-int get_height(Heap* h); //計算這棵樹目前有幾層
-int get_level(int index);//回傳某個 index 位於樹的第幾層
+
+int peek_top(Heap* h) {
+    return (h->size > 0) ? h->data[0] : -1;
+}
+
+int get_height(Heap* h) {//計算這棵樹目前有幾層
+    if (h->size == 0) return 0;
+    return (int)log2(h->size) + 1;
+} 
+
+int get_level(int index) {//回傳某個 index 位於樹的第幾層
+    if (index < 0) return -1;
+    return (int)log2(index + 1);
+}
 
 void build_heap(Heap* h, int *arr, int n){//從雜亂的陣列建一個maxheap或是minheap
     h->size = 0;
@@ -167,7 +193,27 @@ void build_heap(Heap* h, int *arr, int n){//從雜亂的陣列建一個maxheap�
     }
     printf("ACTION: BUILD_HEAP_DONE. Total_Compare: %d\n", h->total_compare_count);
 }
-void heap_sort(Heap* h);//heap sort 不斷 extract_top 將陣列由小到大或由大到小排序
+void heap_sort(Heap* h){//heap sort 不斷 extract_top 將陣列由小到大或由大到小排序
+    //把雜亂的陣列變成 Heap
+    // 假設資料已經在 h->data 裡了
+    for(int i = (h->size/2)-1; i >= 0; i--){
+        sift_down(h, i);
+    }
+    
+    int original_size = h->size;
+    for(int i = 0; i < original_size - 1; i++){
+        // 手動做 extract_top 的邏輯，但把彈出的值存到陣列末尾
+        int last_idx = h->size-1;
+        swap(h, &(h->data[0]), &(h->data[last_idx]));
+        h->size--;
+         printf("ACTION: HEAP_SORT CONTINUE SORTED INDEX: %d\n",last_idx);
+        sift_down(h, 0);
+    }
+    
+    h->size = original_size; // 排序完後還原 size 讓前端印出完整陣列
+    printf("{\"action\": \"SORT_DONE\"}\n");
+    print_heap_state(h);
+}
 
 void update_key(Heap *h, int index, int new_value){// 更改某個節點的值，並重新 Sift 調整
     if (index < 0 || index >= h->size){
@@ -212,41 +258,102 @@ void delete_idx(Heap *h, int index){// 刪除任意 index 的節點，與尾端�
         update_key(h, index, last_value);
     }
 }
-void invert_heap(Heap* h);                  // Max-Heap 與 Min-Heap 瞬間切換
-void merge_heaps(Heap* h1, Heap* h2, Heap* result); // 雙堆合併動畫
-int search_value(Heap* h, int target);      // 展現 O(N) 搜尋的動畫
-int find_kth(Heap* h, int k);               // 尋找第 K 大/小元素
-void batch_insert(Heap* h, int *arr, int n);// 批次匯入展示 O(N log N) 效能
-void clear_heap(Heap* h);                   // 一鍵清空
+void invert_heap(Heap* h) {// Max-Heap 與 Min-Heap 瞬間切換
+    printf("ACTION: INVERT_START. MODE: %s -> %s\n", h->is_max_heap ? "MAX" : "MIN", h->is_max_heap ? "MIN" : "MAX");
+    h->is_max_heap = !h->is_max_heap;
+    for (int i = (h->size / 2) - 1; i >= 0; i--) sift_down(h, i);
+    printf("ACTION: INVERT_DONE\n");
+}           
 
+void merge_heaps(Heap* h1, Heap* h2, Heap* result) {// 雙堆合併動畫
+    if (h1->size + h2->size > MAX_SIZE) { printf("ERROR: Merged size too large!\n"); return; }
+    init_heap(result, h1->is_max_heap);
+    for (int i = 0; i < h1->size; i++) result->data[result->size++] = h1->data[i];
+    for (int i = 0; i < h2->size; i++) result->data[result->size++] = h2->data[i];
+    printf("ACTION: MERGE_START. REBUILDING...\n");
+    for (int i = (result->size / 2) - 1; i >= 0; i--) sift_down(result, i);
+    printf("ACTION: MERGE_DONE\n");
+} 
 
-void print_prefix(Heap* h);
-void print_infix(Heap* h);
-void print_suffix(Heap* h);
-//目前的想法 歡迎多加補充
+int search_value(Heap* h, int target) {// 展現 O(N) 搜尋的動畫
+    for (int i = 0; i < h->size; i++) {
+        printf("ACTION: SEARCH_CHECK INDEX: %d VALUE: %d\n", i, h->data[i]);
+        if (h->data[i] == target) {
+            printf("ACTION: SEARCH_FOUND AT INDEX: %d\n", i);
+            return i;
+        }
+    }
+    printf("ACTION: SEARCH_NOT_FOUND\n");
+    return -1;
+}
+int find_kth(Heap* h, int k) {// 尋找第 K 大/小元素
+    if (k <= 0 || k > h->size) return -1;
+    Heap temp = *h;
+    int val = -1;
+    for (int i = 0; i < k; i++) val = extract_top(&temp);
+    return val;
+}
+void batch_insert(Heap* h, int *arr, int n) {// 批次匯入展示 O(N log N) 效能
+    for (int i = 0; i < n; i++) insert(h, arr[i]);
+}
+void clear_heap(Heap* h) {// 一鍵清空
+    h->size = 0;
+    reset_stats(h);
+    printf("ACTION: CLEAR_HEAP_SUCCESS\n");
+}
+
+void _prefix(Heap* h, int i) {
+    if (i >= h->size) return;
+    printf("%d ", h->data[i]);
+    _prefix(h, 2 * i + 1);
+    _prefix(h, 2 * i + 2);
+}
+void print_prefix(Heap* h) { printf("PREFIX: "); _prefix(h, 0); printf("\n"); }
+
+void _infix(Heap* h, int i) {
+    if (i >= h->size) return;
+    _infix(h, 2 * i + 1);
+    printf("%d ", h->data[i]);
+    _infix(h, 2 * i + 2);
+}
+void print_infix(Heap* h) { printf("INFIX: "); _infix(h, 0); printf("\n"); }
+
+void _suffix(Heap* h, int i) {
+    if (i >= h->size) return;
+    _suffix(h, 2 * i + 1);
+    _suffix(h, 2 * i + 2);
+    printf("%d ", h->data[i]);
+}
+void print_suffix(Heap* h) { printf("SUFFIX: "); _suffix(h, 0); printf("\n"); }
 
 int main(){
-    //讀python的指令
-    //例如讀到inset(10)就執行insert function
     Heap newheap;
-    int a;
-    scanf("%d",&a);//0為min 1為max
-    init_heap(&newheap, a>0);
+    init_heap(&newheap, true); // 預設先開 Max Heap
     
     char command[50];
-    int value;
-    while(scanf("%s",command)!= EOF){
-        if(strcmp(command, "INSERT") == 0){
-            scanf("%d",&value);
-            insert(&newheap, value);
-            print_heap_state(&newheap);
+    while(true){
+        //每次迴圈開始，告訴前端閒置了可以解鎖輸入框了
+        send_state_and_block(&newheap, "IDLE", -1, -1, true);
+
+        // 使用 fgets 讀取前端送來的一整行指令
+        if(fgets(command, sizeof(command), stdin) == NULL) break;
+
+        // 解析指令
+        if(strncmp(command, "INSERT", 6) == 0){
+            int value;
+            if (sscanf(command, "INSERT %d", &value) == 1) {
+                // 不用再 print_heap_state，因為 insert 裡面會呼叫 send_state_and_block
+                insert(&newheap, value);
+            }
         }
-        else if(strcmp(command, "EXTRACT") == 0){
-            int ext = extract_top(&newheap);
-            printf("RESULT_EXTRACT: %d\n", ext);
-            print_heap_state(&newheap);
+        else if(strncmp(command, "EXTRACT", 7) == 0){
+            if (!is_empty(&newheap)) {
+                extract_top(&newheap);
+            } else {
+                send_state_and_block(&newheap, "EMPTY", -1, -1, true);
+            }
         }
-        else if (strcmp(command, "EXIT") == 0) {
+        else if (strncmp(command, "EXIT", 4) == 0) {
             break;
         }
     }
