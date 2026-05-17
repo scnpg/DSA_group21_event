@@ -23,6 +23,7 @@ typedef struct {
     int target_1;
     int target_2;
     bool is_idle;
+    int sort_boundary;  // heap sort 用：index >= sort_boundary 表示「已排序、固定」。-1 表示沒有已排序區
 } VisualState;
 
 typedef void (*StateCallback)(VisualState* state);

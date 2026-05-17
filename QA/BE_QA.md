@@ -1,10 +1,10 @@
 # BE QA 筆記 — spec 沒寫清楚但實作有定下來的點
 
 讀 README_backend.md 跟 demo branch 的 `heap_logic.c` / `main.c` 之後整理。
-spec 有些算式細節沒講，但實作（commit `1684b85`）其實已經做了選擇。
+spec 有些算式細節沒講，但實作其實已經做了選擇。
 這份紀錄一下「實作目前怎麼做」，順便提醒之後 spec (README_backend.md)要補。
 
-測試版本：`demo` branch，commit `1684b85`（擴充操作功能 update invert delete search clear traversal，2026-05-17）。
+測試版本：`demo` branch，commit `d43c38e`（改回原本樣子 只加備份跟還原，2026-05-18）。
 
 ---
 
@@ -148,15 +148,9 @@ python mock_app.py --case 1 --exe ./backend
 
 `--all` 模式最後會印通過 / 失敗總結。
 
-目前實測 14 條全過：
+目前實測 15 條全過：
 
 ```
-========== 測試結果驗證 ==========
-❌ Fail! 預期: [50, 40, 30, 20, 10], 實際: [10, 20, 30, 40, 50]
-
-========== 測試結果驗證 ==========
-❌ Fail! 預期: [60, 40, 50, 20, 10, 30], 實際: [60, 20, 10, 40, 50, 30]
-
 ========== 全部測試結果總結 ==========
   ✅ Case 1: INIT 多值建 heap (bottom-up)
   ✅ Case 2: INSERT 一路 sift 到 root
@@ -164,7 +158,7 @@ python mock_app.py --case 1 --exe ./backend
   ✅ Case 4: UPDATE 改大要 sift up
   ✅ Case 5: UPDATE 改小要 sift down
   ✅ Case 6: DELETE 中間節點
-  ❌ Case 7: SORT 排序結果
+  ✅ Case 7: SORT 排序結果
   ✅ Case 8: 邊界：DELETE 最後一個 index（不需 sift）
   ✅ Case 9: 邊界：從空 heap INSERT 再 EXTRACT 變回空
   ✅ Case 10: 混合：INIT + INSERT + EXTRACT + UPDATE
@@ -172,7 +166,35 @@ python mock_app.py --case 1 --exe ./backend
   ✅ Case 12: 邊界：DELETE root 應等同 EXTRACT
   ✅ Case 13: 混合：連續 INSERT 多次後連續 EXTRACT
   ✅ Case 14: 混合：INIT 後兩個不同方向的 UPDATE
-  ❌ Case 15: 混合：SORT 後再INSERT
+  ✅ Case 15: 混合：SORT 後再INSERT
 
-共 15 條，通過 13，失敗 2
+共 15 條，通過 15，失敗 0
 ```
+
+---
+
+# B. 後續實作的修改
+
+QA 過程中順手改的後端 code，順帶解掉前面 A-5 跟一些動畫問題。
+
+## B-1. 重寫 heap_sort 成非 destructive
+
+原本 heap_sort 跑完之後陣列變成升冪、不再是合法 max heap，使用者再 INSERT/EXTRACT 行為會壞掉（對應 A-5 提到的問題）。
+
+新版做的事：
+- 開頭備份 `original_data[]`
+- 主迴圈不縮 `h->size`，改用 local `boundary` 變數標 heap 區大小（這樣前端能一直看到完整陣列，max 換到尾端後不會消失）
+- 迴圈內每輪：swap root 跟尾端 → boundary-- → sift_down 新 root
+- 跑完送 DONE（升冪畫面，給使用者看一下）
+- 從 backup 還原回原本 heap → 再送 DONE
+- 拿掉開頭多餘的 heapify 迴圈（呼叫前 heap 已經合法，不需要再 sift_down 一輪）
+- 拿掉 swap 前的假 COMPARE 事件（標準 heap sort 在 swap 前不 compare）
+
+## B-2. 新增 sort_boundary 欄位讓前端可以畫已排序區
+
+為了讓前端把已排序的元素標灰：
+- `heap_logic.h` 的 `VisualState` struct 加 `int sort_boundary` 欄位（-1 表示沒已排序區）
+- `heap_logic.c` 加 `trigger_state_with_bound` helper，給 heap_sort 用；既有的 `trigger_state` 預設 sort_boundary=-1
+- `main.c` 的 `send_state_and_block` JSON 多送 `"sort_boundary": <int>`
+- 順手修了 `main.c` 第 50、64 行的 IDLE / EMPTY 狀態 — 加上新欄位之後，positional initializer 漏給最後一個值會被 zero-init 成 0，導致前端把整個 heap 都當已排序區畫灰。明確補 `, -1` 修掉。
+

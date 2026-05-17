@@ -3,7 +3,7 @@
 紀錄前端測試發現的問題，包含讀程式碼 (static review) 跟實際跑起來操作時遇到的狀況。
 參考檔：app.py、ui_components.py、state.py、README_backend.md (spec)。
 
-測試版本：`demo` branch，commit `7a732ad`（feat: add heap_remove_top function，2026-05-12）。
+測試版本：`demo` branch，commit `d43c38e`（改回原本樣子 只加備份跟還原，2026-05-18）。
 
 ---
 
@@ -140,3 +140,24 @@ pytest QA/test_frontend.py -v
 5. `test_visual_state_defaults` — VisualState 不傳參數時要是 IDLE / 空 list
 
 ---
+
+# D. 後續實作的修改
+
+QA 過程中順手改的前端 code。
+
+## D-1. 加 sort_boundary 欄位（配合後端 heap sort 不再 destructive）
+
+heap sort 把「已排序區」畫成不同顏色：
+
+- `state.py` 的 `VisualState` dataclass 加 `sort_boundary: int = -1`（預設 -1 = 沒已排序區）
+- `app.py` 的 `BackendController._read_loop` 解析 JSON 時多讀 `sort_boundary`，預設 -1（向下相容沒這欄位的舊後端 binary）
+- `ui_components.py` 的 `create_heap_view` 拆出三個 helper：
+  - `_is_sorted(i, state)`：判斷 index 是否在已排序區
+  - `_array_bgcolor(i, state)`：array view 用，已排序區 → 灰色 `GREY_400`
+  - `_tree_bgcolor(i, state)`：tree view 用，已排序區 → 深灰 `GREY_600`
+
+按 Sort Heap 跑起來會看到：藍色節點是 heap 區、橘色是當下比較/交換中、灰色是已固定的已排序區。排完最後一格、按下一步後還原成原本 max heap，灰色消失。
+
+## D-2. EXTRACT_SWAP 的 status text
+
+`ui_components.py` 第 15 行原本寫「Action: Swapping root with last node」，但後端 heap_extract_top 用 CLRS 標準的 overwrite（不是 swap），實際畫面會出現「兩個一樣的值」這種看起來像 bug 的中間狀態。改成「Action: Replacing root with last node」，文字跟實作對齊。

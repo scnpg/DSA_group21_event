@@ -2,9 +2,15 @@
 #include <stdio.h>
 #include <math.h>
 
-// 內部小工具：打包並觸發狀態
+// 內部小工具：打包並觸發狀態（一般操作，sort_boundary 預設 -1）
 static void trigger_state(Heap* h, const char* event, int t1, int t2, bool is_idle, StateCallback callback) {
-    VisualState state = {h, event, t1, t2, is_idle};
+    VisualState state = {h, event, t1, t2, is_idle, -1};
+    callback(&state);
+}
+
+// 給 heap_sort 用：帶 sort_boundary，告訴前端哪裡之後是已排序區
+static void trigger_state_with_bound(Heap* h, const char* event, int t1, int t2, bool is_idle, int bound, StateCallback callback) {
+    VisualState state = {h, event, t1, t2, is_idle, bound};
     callback(&state);
 }
 
@@ -54,29 +60,37 @@ void sift_up(Heap* h, int index, StateCallback callback) {
     }
 }
 
-void sift_down(Heap* h, int index, StateCallback callback) {
+// 真正的 sift_down 實作：bound 控制邊界
+// - 一般操作呼叫 sift_down → bound = h->size，sort_boundary=-1（無已排序區）
+// - heap_sort 呼叫 → bound = 縮小中的 boundary，sort_boundary=bound（顯示已排序區）
+static void _sift_down(Heap* h, int index, int bound, StateCallback callback) {
+    int sort_bound = (bound == h->size) ? -1 : bound;
     int left = 2 * index + 1;
-    while (left < h->size) {
+    while (left < bound) {
         int right = 2 * index + 2;
         int extreme_child = left;
-        
-        if (right < h->size) {
+
+        if (right < bound) {
             if (compare(h, h->data[left], h->data[right])) {
                 extreme_child = right;
             }
         }
 
-        trigger_state(h, "COMPARE", index, extreme_child, false, callback);
-        
+        trigger_state_with_bound(h, "COMPARE", index, extreme_child, false, sort_bound, callback);
+
         if (compare(h, h->data[index], h->data[extreme_child])) {
             swap(h, &(h->data[index]), &(h->data[extreme_child]));
-            trigger_state(h, "SWAP", index, extreme_child, false, callback);
+            trigger_state_with_bound(h, "SWAP", index, extreme_child, false, sort_bound, callback);
             index = extreme_child;
             left = 2 * index + 1;
         } else {
             break;
         }
     }
+}
+
+void sift_down(Heap* h, int index, StateCallback callback) {
+    _sift_down(h, index, h->size, callback);
 }
 
 void heap_insert(Heap* h, int value, StateCallback callback) {
@@ -139,36 +153,42 @@ void build_heap(Heap* h, int *arr, int n, StateCallback callback) {
 }
 
 void heap_sort(Heap* h, StateCallback callback) {
-    //先備份
+    // size <= 1 不用排
+    if (h->size <= 1) {
+        trigger_state(h, "DONE", -1, -1, false, callback);
+        return;
+    }
+
+    reset_stats(h);
+
+    // 先備份原始 heap，排完之後要還原
     int original_data[MAX_SIZE];
-    for (int i = 0; i < h->size; i++) {
+    int original_size = h->size;
+    for (int i = 0; i < original_size; i++) {
         original_data[i] = h->data[i];
     }
-    for (int i = (h->size / 2) - 1; i >= 0; i--) {
-        sift_down(h, i, callback);
-    }
-    
-    int original_size = h->size;
-    for (int i = 0; i < original_size - 1; i++) {
-        int last_idx = h->size - 1;
-        trigger_state(h, "EXTRACT_PREPARE", 0, last_idx, false, callback);
-        swap(h, &(h->data[0]), &(h->data[last_idx]));
-        trigger_state(h, "EXTRACT_SWAP", 0, last_idx, false, callback);
-        
-        h->size--;
-        sift_down(h, 0, callback);
-    }
-    
-    h->size = original_size; 
-    //等待按下一步
-    trigger_state(h, "SORT_COMPLETED", -1, -1, false, callback);
 
-    //按下下一步後覆蓋回去，還原 Max Heap
-    for (int i = 0; i < h->size; i++) {
+    // 反覆把 root（max）換到 heap 區尾端，boundary 縮小一格
+    // 注意：呼叫 SORT 前 heap 已經是合法 max heap，不需要再 heapify 一次
+    // 注意：boundary 是「還在 heap 區的元素數量」，h->size 保持 original_size 不變
+    //       這樣前端會一直看到全部元素，包含已排序到後段的最大值
+    int boundary = original_size;
+    for (int i = 0; i < original_size - 1; i++) {
+        int last_idx = boundary - 1;
+        // 直接 swap，不 compare（max heap 性質保證 root 就是最大值）
+        swap(h, &(h->data[0]), &(h->data[last_idx]));
+        trigger_state_with_bound(h, "SWAP", 0, last_idx, false, boundary, callback);
+        boundary--;
+        _sift_down(h, 0, boundary, callback);
+    }
+
+    // 顯示排好的升冪結果（boundary=0 表示整個陣列都是已排序區）
+    trigger_state_with_bound(h, "DONE", -1, -1, false, 0, callback);
+
+    // 還原回 sort 前的 heap
+    for (int i = 0; i < original_size; i++) {
         h->data[i] = original_data[i];
     }
-
-    //DONE 解除鎖定
     trigger_state(h, "DONE", -1, -1, false, callback);
 }
 

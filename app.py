@@ -29,7 +29,8 @@ class BackendController:
                     heap=data.get("heap", []),
                     event=data.get("event", "IDLE"),
                     targets=data.get("targets", []),
-                    is_idle=data.get("is_idle", True)
+                    is_idle=data.get("is_idle", True),
+                    sort_boundary=data.get("sort_boundary", -1)
                 )
                 self.on_state_update(state)
             except Exception as e:
