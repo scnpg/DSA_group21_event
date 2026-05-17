@@ -1,140 +1,270 @@
 #include "heap_logic.h"
+#include <stdio.h>
+#include <math.h>
 
-#include "heap_logic.h"
-
-void heap_remove_top(int* heap, int* size, StateCallback callback) {
-    if (*size <= 0) return;
-
-    // Step 1: Mark the top for removal (before swapping with the last node)
-    VisualState state = {heap, *size, "EXTRACT_PREPARE", 0, *size - 1, false};
+// 內部小工具：打包並觸發狀態
+static void trigger_state(Heap* h, const char* event, int t1, int t2, bool is_idle, StateCallback callback) {
+    VisualState state = {h, event, t1, t2, is_idle};
     callback(&state);
-
-    // Step 2: Swap the top element with the last element
-    int temp = heap[0];
-    heap[0] = heap[*size - 1];
-    heap[*size - 1] = temp;
-
-    // Trigger callback to reflect the swap
-    state.event = "EXTRACT_SWAP";
-    callback(&state);
-
-    // Step 3: Decrease the size; the original top is now outside the active heap range
-    (*size)--;
-
-    // Step 4: Perform sift_down if there are remaining nodes
-    if (*size > 0) {
-        state.size = *size;
-        state.event = "REMOVED_START_SIFT";
-        state.target_1 = -1;
-        state.target_2 = -1;
-        callback(&state);
-
-        sift_down(heap, *size, 0, callback);
-    }
-
-    // Step 5: Process completed
-    VisualState done = {heap, *size, "DONE", -1, -1, true};
-    callback(&done);
 }
 
-void sift_down(int* heap, int size, int index, StateCallback callback) {
-    int root = index;
-    while (root * 2 + 1 < size) {
-        int child = root * 2 + 1;
-        int target = root;
-
-        // COMPARE event
-        VisualState state = {heap, size, "COMPARE", target, child, false};
-        
-        if (heap[target] < heap[child]) target = child;
-        if (child + 1 < size) {
-            state.target_2 = child + 1;
-            callback(&state); // Visualize comparison with second child
-            if (heap[target] < heap[child + 1]) target = child + 1;
-        } else {
-            callback(&state);
-        }
-
-        if (target == root) break;
-        
-        // SWAP event
-        int temp = heap[root];
-        heap[root] = heap[target];
-        heap[target] = temp;
-        
-        state.event = "SWAP";
-        state.target_1 = root;
-        state.target_2 = target;
-        callback(&state);
-
-        root = target;
-    }
+void swap(Heap* h, int* a, int* b) {
+    int temp = *a;
+    *a = *b;
+    *b = temp;
+    h->cur_swap_count++;
+    h->total_swap_count++;
 }
 
-void heap_sort(int* heap, int* size, StateCallback callback) {
-    int n = *size;
-    // Build heap (re-arrange array)
-    for (int i = n / 2 - 1; i >= 0; i--) {
-        sift_down(heap, n, i, callback);
-    }
-
-    // One by one extract an element from heap
-    for (int i = n - 1; i > 0; i--) {
-        // Move current root to end
-        int temp = heap[0];
-        heap[0] = heap[i];
-        heap[i] = temp;
-
-        VisualState state = {heap, n, "SORT_EXTRACT", 0, i, false};
-        callback(&state);
-
-        // call max heapify on the reduced heap
-        sift_down(heap, i, 0, callback);
-    }
-    
-    VisualState done = {heap, n, "DONE", -1, -1, true};
-    callback(&done);
+bool compare(Heap* h, int parent_val, int child_val) {
+    h->cur_compare_count++;
+    h->total_compare_count++;
+    return h->is_max_heap ? (child_val > parent_val) : (child_val < parent_val);
 }
 
+void init_heap(Heap* h, bool is_max) {
+    h->is_max_heap = is_max;
+    h->size = 0;
+    h->cur_compare_count = 0;
+    h->cur_swap_count = 0;
+    h->total_compare_count = 0;
+    h->total_swap_count = 0;
+}
 
-void heap_insert(int* heap, int* size, int value, StateCallback callback) {
-    int i = *size;
-    heap[i] = value;
-    (*size)++;
+void reset_stats(Heap* h) {
+    h->cur_compare_count = 0;
+    h->cur_swap_count = 0;
+}
 
-    // 狀態 1：剛放入陣列尾端
-    VisualState state = {heap, *size, "INSERTED", i, -1, false};
-    callback(&state);
+bool is_empty(Heap* h) { return h->size == 0; }
+bool is_full(Heap* h) { return h->size == MAX_SIZE; }
 
-    // 開始向上篩選 (Sift Up)
-    while (i > 0) {
-        int parent = (i - 1) / 2;
+void sift_up(Heap* h, int index, StateCallback callback) {
+    while (index > 0) {
+        int parent = (index - 1) / 2;
+        trigger_state(h, "COMPARE", index, parent, false, callback);
         
-        // 狀態 2：比較中
-        state.event = "COMPARE";
-        state.target_1 = i;
-        state.target_2 = parent;
-        callback(&state);
-
-        if (heap[parent] < heap[i]) {
-            // 交換邏輯
-            int temp = heap[parent];
-            heap[parent] = heap[i];
-            heap[i] = temp;
-
-            // 狀態 3：發生交換
-            state.event = "SWAP";
-            callback(&state);
-            i = parent;
+        if (compare(h, h->data[parent], h->data[index])) {
+            swap(h, &(h->data[index]), &(h->data[parent]));
+            trigger_state(h, "SWAP", index, parent, false, callback);
+            index = parent;
         } else {
             break;
         }
     }
-    
-    // 狀態 4：操作完成，回歸閒置
-    state.event = "DONE";
-    state.target_1 = -1;
-    state.target_2 = -1;
-    state.is_idle = true;
-    callback(&state);
 }
+
+void sift_down(Heap* h, int index, StateCallback callback) {
+    int left = 2 * index + 1;
+    while (left < h->size) {
+        int right = 2 * index + 2;
+        int extreme_child = left;
+        
+        if (right < h->size) {
+            if (compare(h, h->data[left], h->data[right])) {
+                extreme_child = right;
+            }
+        }
+
+        trigger_state(h, "COMPARE", index, extreme_child, false, callback);
+        
+        if (compare(h, h->data[index], h->data[extreme_child])) {
+            swap(h, &(h->data[index]), &(h->data[extreme_child]));
+            trigger_state(h, "SWAP", index, extreme_child, false, callback);
+            index = extreme_child;
+            left = 2 * index + 1;
+        } else {
+            break;
+        }
+    }
+}
+
+void heap_insert(Heap* h, int value, StateCallback callback) {
+    if (is_full(h)) {
+        fprintf(stderr, "ERROR: Heap is full!\n");
+        return;
+    }
+    
+    reset_stats(h);
+    int index = h->size;
+    h->data[index] = value;
+    h->size++;
+    
+    trigger_state(h, "INSERTED", index, -1, false, callback);
+    sift_up(h, index, callback);
+    // 修正：DONE 必須是 false，讓前端按最後一次下一步
+    trigger_state(h, "DONE", -1, -1, false, callback);
+}
+
+int heap_extract_top(Heap* h, StateCallback callback) {
+    if (is_empty(h)) {
+        fprintf(stderr, "ERROR: Heap is empty!\n");
+        return -1;
+    }
+
+    reset_stats(h);
+    trigger_state(h, "EXTRACT_PREPARE", 0, h->size - 1, false, callback);
+
+    int top = h->data[0];
+    h->data[0] = h->data[h->size - 1];
+    trigger_state(h, "EXTRACT_SWAP", 0, h->size - 1, false, callback);
+    
+    h->size--;
+    
+    if (h->size > 0) {
+        trigger_state(h, "REMOVED_START_SIFT", -1, -1, false, callback);
+        sift_down(h, 0, callback);
+    }
+    
+    // 修正：DONE 必須是 false
+    trigger_state(h, "DONE", -1, -1, false, callback);
+    return top;
+}
+
+void build_heap(Heap* h, int *arr, int n, StateCallback callback) {
+    h->size = 0;
+    for (int i = 0; i < n && i < MAX_SIZE; i++) {
+        h->data[i] = arr[i];
+        h->size++;
+    }
+    reset_stats(h);
+    
+    trigger_state(h, "INSERTED", 0, h->size - 1, false, callback);
+
+    for (int i = (h->size / 2) - 1; i >= 0; i--) {
+        sift_down(h, i, callback);
+    }
+    // 修正：DONE 必須是 false
+    trigger_state(h, "DONE", -1, -1, false, callback);
+}
+
+void heap_sort(Heap* h, StateCallback callback) {
+    for (int i = (h->size / 2) - 1; i >= 0; i--) {
+        sift_down(h, i, callback);
+    }
+    
+    int original_size = h->size;
+    for (int i = 0; i < original_size - 1; i++) {
+        int last_idx = h->size - 1;
+        trigger_state(h, "EXTRACT_PREPARE", 0, last_idx, false, callback);
+        swap(h, &(h->data[0]), &(h->data[last_idx]));
+        trigger_state(h, "EXTRACT_SWAP", 0, last_idx, false, callback);
+        
+        h->size--;
+        sift_down(h, 0, callback);
+    }
+    
+    h->size = original_size; 
+    // 修正：DONE 必須是 false
+    trigger_state(h, "DONE", -1, -1, false, callback);
+}
+
+void update_key(Heap *h, int index, int new_value, StateCallback callback) {
+    if (index < 0 || index >= h->size) {
+        fprintf(stderr, "ERROR: Invalid index %d\n", index);
+        return;
+    }
+    reset_stats(h);
+    h->data[index] = new_value;
+    
+    trigger_state(h, "INSERTED", index, -1, false, callback);
+    
+    if (index == 0) {
+        sift_down(h, 0, callback);
+    } else {
+        int parent = (index - 1) / 2;
+        trigger_state(h, "COMPARE", index, parent, false, callback);
+        if (compare(h, h->data[parent], h->data[index])) {
+            sift_up(h, index, callback);
+        } else {
+            sift_down(h, index, callback);
+        }
+    }
+    // 修正：DONE 必須是 false
+    trigger_state(h, "DONE", -1, -1, false, callback);
+}
+
+void delete_idx(Heap *h, int index, StateCallback callback) {
+    if (index < 0 || index >= h->size) {
+        fprintf(stderr, "ERROR: Invalid index %d\n", index);
+        return;
+    }
+    reset_stats(h);
+
+    if (index == h->size - 1) {
+        h->size--;
+        trigger_state(h, "DONE", -1, -1, false, callback);
+    } else {
+        trigger_state(h, "EXTRACT_PREPARE", index, h->size - 1, false, callback);
+        int last_value = h->data[h->size - 1];
+        h->data[index] = last_value;
+        h->size--;
+        trigger_state(h, "EXTRACT_SWAP", index, h->size, false, callback);
+        
+        int parent = (index - 1) / 2;
+        if (index > 0) trigger_state(h, "COMPARE", index, parent, false, callback);
+        
+        if (index > 0 && compare(h, h->data[parent], h->data[index])) sift_up(h, index, callback);
+        else sift_down(h, index, callback);
+        
+        // 修正：DONE 必須是 false
+        trigger_state(h, "DONE", -1, -1, false, callback);
+    }
+}
+
+void invert_heap(Heap* h, StateCallback callback) {
+    h->is_max_heap = !h->is_max_heap;
+    trigger_state(h, "REMOVED_START_SIFT", -1, -1, false, callback);
+    for (int i = (h->size / 2) - 1; i >= 0; i--) {
+        sift_down(h, i, callback);
+    }
+    // 修正：DONE 必須是 false
+    trigger_state(h, "DONE", -1, -1, false, callback);
+}
+
+int search_value(Heap* h, int target, StateCallback callback) {
+    for (int i = 0; i < h->size; i++) {
+        trigger_state(h, "COMPARE", i, -1, false, callback); 
+        if (h->data[i] == target) {
+            trigger_state(h, "SWAP", i, -1, false, callback); 
+            // 修正：DONE 必須是 false
+            trigger_state(h, "DONE", -1, -1, false, callback);
+            return i;
+        }
+    }
+    // 修正：DONE 必須是 false
+    trigger_state(h, "DONE", -1, -1, false, callback);
+    return -1;
+}
+
+void clear_heap(Heap* h, StateCallback callback) {
+    h->size = 0;
+    reset_stats(h);
+    // 修正：DONE 必須是 false
+    trigger_state(h, "DONE", -1, -1, false, callback);
+}
+
+// === 遍歷列印 (走 stderr 避免干擾 JSON IPC) ===
+void _prefix(Heap* h, int i) {
+    if (i >= h->size) return;
+    fprintf(stderr, "%d ", h->data[i]);
+    _prefix(h, 2 * i + 1);
+    _prefix(h, 2 * i + 2);
+}
+void print_prefix(Heap* h) { fprintf(stderr, "PREFIX: "); _prefix(h, 0); fprintf(stderr, "\n"); }
+
+void _infix(Heap* h, int i) {
+    if (i >= h->size) return;
+    _infix(h, 2 * i + 1);
+    fprintf(stderr, "%d ", h->data[i]);
+    _infix(h, 2 * i + 2);
+}
+void print_infix(Heap* h) { fprintf(stderr, "INFIX: "); _infix(h, 0); fprintf(stderr, "\n"); }
+
+void _suffix(Heap* h, int i) {
+    if (i >= h->size) return;
+    _suffix(h, 2 * i + 1);
+    _suffix(h, 2 * i + 2);
+    fprintf(stderr, "%d ", h->data[i]);
+}
+void print_suffix(Heap* h) { fprintf(stderr, "SUFFIX: "); _suffix(h, 0); fprintf(stderr, "\n"); }

@@ -8,7 +8,7 @@ TEST_CASES = {
     "1": {
         "name": "測試 Max-Heap: INSERT 極大值與 Sift Up",
         "commands": ["INIT 10,20,30", "INSERT 99"],
-        "expected_heap": [99, 30, 20, 10] 
+        "expected_heap": [99, 30, 10, 20] 
     },
     "2": {
         "name": "測試連續 Extract",
