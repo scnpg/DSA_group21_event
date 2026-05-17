@@ -139,19 +139,16 @@ void build_heap(Heap* h, int *arr, int n, StateCallback callback) {
 }
 
 void heap_sort(Heap* h, StateCallback callback) {
-    //建立備份
+    //先備份
     int original_data[MAX_SIZE];
-    int original_size = h->size;
     for (int i = 0; i < h->size; i++) {
         original_data[i] = h->data[i];
     }
-
-    // 確保目前是合法的 Heap 結構（建構 Max Heap）
     for (int i = (h->size / 2) - 1; i >= 0; i--) {
         sift_down(h, i, callback);
     }
     
-    //執行 Heap Sort
+    int original_size = h->size;
     for (int i = 0; i < original_size - 1; i++) {
         int last_idx = h->size - 1;
         trigger_state(h, "EXTRACT_PREPARE", 0, last_idx, false, callback);
@@ -162,18 +159,16 @@ void heap_sort(Heap* h, StateCallback callback) {
         sift_down(h, 0, callback);
     }
     
-    //恢復 size 讓前端能看到完整的已排序陣列
     h->size = original_size; 
-    
-    //觸發一個狀態讓畫面停留在「排序完成」，等待按下「下一步」
+    //等待按下一步
     trigger_state(h, "SORT_COMPLETED", -1, -1, false, callback);
 
-    //按下「下一步」後將備份的資料寫回，完全還原原本的 Heap 結構
+    //按下下一步後覆蓋回去，還原 Max Heap
     for (int i = 0; i < h->size; i++) {
         h->data[i] = original_data[i];
     }
 
-    //顯示還原後的 Heap 畫面
+    //DONE 解除鎖定
     trigger_state(h, "DONE", -1, -1, false, callback);
 }
 
