@@ -188,3 +188,57 @@ python mock_app.py --case 1 --exe ./main
 ```
 python mock_app.py --case 1 --exe ./main
 ```
+
+---
+
+## 7. Spec 補充說明（邊界行為定義）
+
+以下為 QA 過程中發現的 spec 模糊點，現補充為正式規範。
+
+### 7-1. Sift Down 遇到左右子節點相等時的選擇
+
+**規範**：左右子節點數值相等時，**選左子節點**繼續 sift down。
+
+實作依據：`sift_down` 內部使用嚴格大於（`>`）做比較，相等時不更換極值子節點，故預設停留在左邊。
+
+範例：heap = `[10, 50, 50]` → sift down root → `[50, 10, 50]`（左子升頂）。
+
+---
+
+### 7-2. `INIT` 不帶值時的行為
+
+**規範**：`INIT` 後不附帶任何值（即純 `INIT\n`）時，後端**忽略此指令，heap 不變**。
+
+後端採用 `strncmp(cmd, "INIT ", 5)` 比對帶空格的前綴，純 `INIT` 不符合任何分支，等同 noop。若要清空 heap，請改用 `CLEAR` 指令。
+
+---
+
+### 7-3. `INSERT` 滿堆時的行為
+
+**規範**：`MAX_SIZE = 100`（定義於 `heap_logic.h`）。堆滿時再 `INSERT`，後端會：
+
+1. 拒絕插入，heap 不變。
+2. 以 `fprintf(stderr, ...)` 寫入錯誤訊息（不污染 JSON 管線）。
+3. **不送任何 JSON 狀態給前端**，前端畫面維持不動。
+
+前端不會收到 INSERT 被拒絕的通知，展示時請避免超過 100 個節點。
+
+---
+
+### 7-4. `INIT` 帶多個值時的建堆方法
+
+**規範**：`INIT v1,v2,v3,...` 使用 **bottom-up heapify（Floyd 演算法）** 建堆，時間複雜度 O(n)。
+
+流程：先將所有值依序填入陣列，再從 `size/2 - 1` 到 `0` 依序執行 `sift_down`。
+
+與逐個 INSERT（top-down）結果不同：`INIT 10,20,30` → `[30, 20, 10]`（bottom-up），而非 `[30, 10, 20]`（top-down）。mock_app.py 的 expected_heap 均依此計算。
+
+---
+
+### 7-5. `SORT` 排序方向與是否 destructive
+
+**規範**：
+
+* **排序方向**：升冪（小 → 大）。heap sort 每輪把最大值換到尾端，最終陣列由小到大。
+* **非 destructive**：SORT 完成後後端會**自動還原**成 SORT 前的 max heap 狀態（備份並恢復 `data[]`），使用者可繼續執行 INSERT / EXTRACT 等操作。
+* **動畫流程**：排序完成後先送一次 DONE（讓使用者看到升冪結果），再還原並送 DONE（回到原 heap），最後送 IDLE 解鎖操作面板。

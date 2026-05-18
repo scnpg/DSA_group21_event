@@ -64,6 +64,12 @@ def get_status_text(state):
     elif e == "EMPTY":
         return "Status: Heap 已空，無法執行此操作。"
 
+    elif e == "IPC_ERROR":
+        return "⚠️ IPC 解析錯誤，請重啟程式。"
+
+    elif e == "BACKEND_DIED":
+        return "⚠️ 後端程序已結束，請重啟程式。"
+
     return f"Action: {e} 進行中..."
 
 

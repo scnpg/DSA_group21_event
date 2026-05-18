@@ -39,6 +39,9 @@ class BackendController:
                 self.on_state_update(state)
             except Exception as e:
                 print(f"IPC 解析錯誤: {e}")
+                self.on_state_update(VisualState(event="IPC_ERROR", is_idle=True))
+        # 後端程序已結束（stdout EOF）
+        self.on_state_update(VisualState(event="BACKEND_DIED", is_idle=True))
 
     def send_command(self, cmd: str):
         self.proc.stdin.write(cmd + "\n")
@@ -65,6 +68,8 @@ def main(page: ft.Page):
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.theme_mode = ft.ThemeMode.LIGHT
     page.window_width = 1200
+    page.window_height = 820
+    page.scroll = ft.ScrollMode.AUTO
 
     # ── 視覺區塊 ──────────────────────────────────────────────────
     status_text     = ft.Text("初始化中...", size=16, color=ft.Colors.BLUE_700)

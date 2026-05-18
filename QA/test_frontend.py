@@ -22,7 +22,7 @@ def test_idle_should_say_ready():
 def test_compare_shows_target_indices():
     s = make_state(event="COMPARE", is_idle=False, targets=[0, 1])
     text = get_status_text(s)
-    assert "Compar" in text
+    assert "比較" in text
     assert "0" in text and "1" in text
 
 
@@ -33,12 +33,12 @@ def test_unknown_event_should_not_crash():
     assert "WEIRD_EVENT_xyz" in text
 
 
-# 4. 對應 QA.md 第 5 點：spec 寫 INSERTED 但前端只認 INSERT
-#    這條測試「過」代表 bug 還在（前端沒專屬訊息）
-def test_spec_INSERTED_falls_to_fallback():
+# 4. 對應 FE_QA #5：INSERTED 現在有專屬中文文案，不應掉到 fallback
+def test_spec_INSERTED_has_dedicated_text():
     s = make_state(event="INSERTED", is_idle=False)
     text = get_status_text(s)
-    assert "in progress" in text
+    assert "插入" in text      # 有專屬文案，不是 fallback "進行中"
+    assert "in progress" not in text
 
 
 # 5. VisualState 不傳參數時應該是 IDLE 狀態
