@@ -13,17 +13,15 @@ void send_state_and_block(VisualState* state) {
     }
     
     // 2. JSON: 事件與目標陣列
-    printf("], \"size\": %d, \"event\": \"%s\", \"targets\": ", h->size, state->event);
-    if (state->target_1 != -1 && state->target_2 != -1) {
-        printf("[%d, %d]", state->target_1, state->target_2);
-    } else if (state->target_1 != -1) {
-        printf("[%d]", state->target_1);
-    } else {
-        printf("[]");
+    printf("], \"size\": %d, \"event\": \"%s\", \"targets\": [", h->size, state->event);
+    for (int i = 0; i < state->num_targets; i++) {
+        printf("%d%s", state->targets[i], (i == state->num_targets - 1) ? "" : ", ");
     }
+    printf("]");
 
     // 3. JSON: 閒置旗標、排序邊界、儀表板數據
     printf(", \"is_idle\": %s, ", state->is_idle ? "true" : "false");
+    printf("\"is_max_heap\": %s, ", h->is_max_heap ? "true" : "false");
     printf("\"sort_boundary\": %d, ", state->sort_boundary);
     printf("\"stats\": {\"cur_swap\": %d, \"cur_cmp\": %d, \"tot_swap\": %d, \"tot_cmp\": %d}}\n",
            h->cur_swap_count, h->cur_compare_count, h->total_swap_count, h->total_compare_count);
@@ -48,7 +46,12 @@ int main() {
     char cmd[150];
     while (true) {
         // 發送全局閒置，解鎖前端操作面板
-        VisualState idle_state = {&my_heap, "IDLE", -1, -1, true, -1};
+        VisualState idle_state;
+        idle_state.h = &my_heap;
+        idle_state.event = "IDLE";
+        idle_state.num_targets = 0;
+        idle_state.is_idle = true;
+        idle_state.sort_boundary = -1;
         send_state_and_block(&idle_state);
 
         // 讀取前端送來的大指令 (只要讀到 EOF 或 EXIT 就乖乖關閉 Process)
@@ -56,13 +59,25 @@ int main() {
         if (strncmp(cmd, "EXIT", 4) == 0) break;
 
         if (strncmp(cmd, "INSERT ", 7) == 0) {
-            int val;
-            if (sscanf(cmd, "INSERT %d", &val) == 1) heap_insert(&my_heap, val, send_state_and_block);
+            char* p = cmd + 7;
+            while (*p && *p != '\n') {
+                int val;
+                if (sscanf(p, "%d", &val) == 1) {
+                    heap_insert(&my_heap, val, send_state_and_block);
+                    while (*p && *p != ',' && *p != '\n') p++;
+                    if (*p == ',') p++;
+                } else break;
+            }
         }
         else if (strncmp(cmd, "EXTRACT", 7) == 0 || strncmp(cmd, "REMOVE", 6) == 0) {
             if (!is_empty(&my_heap)) heap_extract_top(&my_heap, send_state_and_block);
             else {
-                VisualState empty = {&my_heap, "EMPTY", -1, -1, true, -1};
+                VisualState empty;
+                empty.h = &my_heap;
+                empty.event = "EMPTY";
+                empty.num_targets = 0;
+                empty.is_idle = true;
+                empty.sort_boundary = -1;
                 send_state_and_block(&empty);
             }
         }

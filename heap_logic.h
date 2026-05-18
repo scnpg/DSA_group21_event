@@ -20,8 +20,8 @@ typedef struct {
 typedef struct {
     Heap* h;
     const char* event;
-    int target_1;
-    int target_2;
+    int targets[MAX_SIZE];  // 目標節點索引陣列
+    int num_targets;        // 實際目標數量
     bool is_idle;
     int sort_boundary;  // heap sort 用：index >= sort_boundary 表示「已排序、固定」。-1 表示沒有已排序區
 } VisualState;

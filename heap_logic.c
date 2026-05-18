@@ -4,13 +4,39 @@
 
 // 內部小工具：打包並觸發狀態（一般操作，sort_boundary 預設 -1）
 static void trigger_state(Heap* h, const char* event, int t1, int t2, bool is_idle, StateCallback callback) {
-    VisualState state = {h, event, t1, t2, is_idle, -1};
+    VisualState state;
+    state.h = h;
+    state.event = event;
+    state.is_idle = is_idle;
+    state.sort_boundary = -1;
+    state.num_targets = 0;
+    if (t1 != -1) state.targets[state.num_targets++] = t1;
+    if (t2 != -1) state.targets[state.num_targets++] = t2;
     callback(&state);
 }
 
-// 給 heap_sort 用：帶 sort_boundary，告訴前端哪裡之後是已排序區
+// 給 heap_sort 用：帶 sort_boundary
 static void trigger_state_with_bound(Heap* h, const char* event, int t1, int t2, bool is_idle, int bound, StateCallback callback) {
-    VisualState state = {h, event, t1, t2, is_idle, bound};
+    VisualState state;
+    state.h = h;
+    state.event = event;
+    state.is_idle = is_idle;
+    state.sort_boundary = bound;
+    state.num_targets = 0;
+    if (t1 != -1) state.targets[state.num_targets++] = t1;
+    if (t2 != -1) state.targets[state.num_targets++] = t2;
+    callback(&state);
+}
+
+// 給 search 用：傳入任意數量的目標索引
+static void trigger_state_multi(Heap* h, const char* event, int* targets, int num_targets, bool is_idle, StateCallback callback) {
+    VisualState state;
+    state.h = h;
+    state.event = event;
+    state.is_idle = is_idle;
+    state.sort_boundary = -1;
+    state.num_targets = num_targets < MAX_SIZE ? num_targets : MAX_SIZE;
+    for (int i = 0; i < state.num_targets; i++) state.targets[i] = targets[i];
     callback(&state);
 }
 
@@ -175,21 +201,21 @@ void heap_sort(Heap* h, StateCallback callback) {
     int boundary = original_size;
     for (int i = 0; i < original_size - 1; i++) {
         int last_idx = boundary - 1;
-        // 直接 swap，不 compare（max heap 性質保證 root 就是最大值）
+        // 先 swap，再把 boundary 縮小一格，讓 SWAP 這一幀就能看到正確的已排序區
         swap(h, &(h->data[0]), &(h->data[last_idx]));
-        trigger_state_with_bound(h, "SWAP", 0, last_idx, false, boundary, callback);
         boundary--;
+        trigger_state_with_bound(h, "SWAP", 0, last_idx, false, boundary, callback);
         _sift_down(h, 0, boundary, callback);
     }
 
     // 顯示排好的升冪結果（boundary=0 表示整個陣列都是已排序區）
     trigger_state_with_bound(h, "DONE", -1, -1, false, 0, callback);
 
-    // 還原回 sort 前的 heap
+    // 靜默還原回 sort 前的 heap（不 trigger，不阻塞）
     for (int i = 0; i < original_size; i++) {
         h->data[i] = original_data[i];
     }
-    trigger_state(h, "DONE", -1, -1, false, callback);
+    // ← 第二個 DONE 已移除（Option A：靜默還原）
 }
 
 void update_key(Heap *h, int index, int new_value, StateCallback callback) {
@@ -228,11 +254,11 @@ void delete_idx(Heap *h, int index, StateCallback callback) {
         h->size--;
         trigger_state(h, "DONE", -1, -1, false, callback);
     } else {
-        trigger_state(h, "EXTRACT_PREPARE", index, h->size - 1, false, callback);
+        trigger_state(h, "DELETE_PREPARE", index, h->size - 1, false, callback);
         int last_value = h->data[h->size - 1];
         h->data[index] = last_value;
         h->size--;
-        trigger_state(h, "EXTRACT_SWAP", index, h->size, false, callback);
+        trigger_state(h, "DELETE_SWAP", index, h->size, false, callback);
         
         int parent = (index - 1) / 2;
         if (index > 0) trigger_state(h, "COMPARE", index, parent, false, callback);
@@ -240,34 +266,50 @@ void delete_idx(Heap *h, int index, StateCallback callback) {
         if (index > 0 && compare(h, h->data[parent], h->data[index])) sift_up(h, index, callback);
         else sift_down(h, index, callback);
         
-        // 修正：DONE 必須是 false
         trigger_state(h, "DONE", -1, -1, false, callback);
     }
 }
 
 void invert_heap(Heap* h, StateCallback callback) {
     h->is_max_heap = !h->is_max_heap;
-    trigger_state(h, "REMOVED_START_SIFT", -1, -1, false, callback);
+    reset_stats(h);
+    trigger_state(h, "INVERT_START", -1, -1, false, callback);
     for (int i = (h->size / 2) - 1; i >= 0; i--) {
         sift_down(h, i, callback);
     }
-    // 修正：DONE 必須是 false
     trigger_state(h, "DONE", -1, -1, false, callback);
 }
 
 int search_value(Heap* h, int target, StateCallback callback) {
+    reset_stats(h);
+    int found[MAX_SIZE];
+    int num_found = 0;
+    int cmp_targets[MAX_SIZE + 1];
+
     for (int i = 0; i < h->size; i++) {
-        trigger_state(h, "COMPARE", i, -1, false, callback); 
+        // 手動計入這次比較（search 用 == 不走 compare()，需自行累計）
+        h->cur_compare_count++;
+        h->total_compare_count++;
+
+        // SEARCH_CMP: targets[0] = 當前比較節點，targets[1..] = 已找到的節點
+        int cmp_count = 0;
+        cmp_targets[cmp_count++] = i;
+        for (int j = 0; j < num_found; j++) cmp_targets[cmp_count++] = found[j];
+        trigger_state_multi(h, "SEARCH_CMP", cmp_targets, cmp_count, false, callback);
+
         if (h->data[i] == target) {
-            trigger_state(h, "SWAP", i, -1, false, callback); 
-            // 修正：DONE 必須是 false
-            trigger_state(h, "DONE", -1, -1, false, callback);
-            return i;
+            found[num_found++] = i;
+            // FOUND: targets = 所有已找到的節點（含剛找到的）
+            trigger_state_multi(h, "FOUND", found, num_found, false, callback);
         }
     }
-    // 修正：DONE 必須是 false
-    trigger_state(h, "DONE", -1, -1, false, callback);
-    return -1;
+
+    if (num_found > 0) {
+        trigger_state_multi(h, "SEARCH_DONE", found, num_found, false, callback);
+    } else {
+        trigger_state(h, "SEARCH_NOT_FOUND", -1, -1, false, callback);
+    }
+    return num_found > 0 ? found[0] : -1;
 }
 
 void clear_heap(Heap* h, StateCallback callback) {
