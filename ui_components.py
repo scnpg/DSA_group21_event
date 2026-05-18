@@ -18,7 +18,7 @@ def get_status_text(state):
         return f"Action: 準備移除 Root，標記 Root {t} 與最後節點..."
 
     elif e == "EXTRACT_SWAP":
-        return f"Action: 將 Root 與最後節點 {t} 對調..."
+        return f"Action: 用最後節點覆寫 Root {t}（原 Root 已取出）..."
 
     elif e == "REMOVED_START_SIFT":
         return "Action: Root 已移除，開始 Sift Down 恢復 Heap 性質..."
